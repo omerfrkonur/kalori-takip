@@ -478,6 +478,7 @@ body.light-mode{--bg:#F2F1EC;--surface:#FFFFFF;--surface2:#ECEAE3;--surface3:#E4
           <div class="form-row col2"><div class="form-group"><label>Kalori (kcal/100g)</label><input id="f-kcal" type="number" autocomplete="off" placeholder="0" min="0"/></div><div class="form-group"><label>Protein (g/100g)</label><input id="f-p" type="number" autocomplete="off" placeholder="0" min="0" step="0.1"/></div></div>
           <div class="form-row col2"><div class="form-group"><label>Karbonhidrat (g/100g)</label><input id="f-c" type="number" autocomplete="off" placeholder="0" min="0" step="0.1"/></div><div class="form-group"><label>Yağ (g/100g)</label><input id="f-f" type="number" autocomplete="off" placeholder="0" min="0" step="0.1"/></div></div>
           <div class="form-row col2"><div class="form-group"><label>Lif (g/100g)</label><input id="f-fiber" type="number" autocomplete="off" placeholder="0" min="0" step="0.1"/></div><div class="form-group"><label>Öğün saati</label><input id="f-time" type="time" autocomplete="off"/></div></div>
+          <div class="form-row col2"><div class="form-group"><label>Tarih</label><select id="f-date" autocomplete="off"></select></div><div class="form-group" style="display:flex;align-items:flex-end"><button class="btn" style="width:100%;font-size:12px;padding:10px" onclick="setFDateToday()">📅 Bugün</button></div></div>
           <div style="display:flex;gap:8px;margin-top:4px"><button class="btn btn-primary" style="flex:1" onclick="addFoodManual()">Ekle</button><button class="btn" onclick="clearManualForm()">Temizle</button></div>
         </div>
       </div>
@@ -837,6 +838,9 @@ body.light-mode{--bg:#F2F1EC;--surface:#FFFFFF;--surface2:#ECEAE3;--surface3:#E4
     <div class="modal-row">
       <div><label>Öğün saati</label><input id="modal-time" type="time" autocomplete="off"/></div>
       <div style="display:flex;align-items:flex-end;padding-bottom:2px"><button class="btn" style="font-size:11px;padding:8px 12px;width:100%" onclick="setModalTimeNow()">🕐 Şimdi</button></div>
+    </div>
+    <div class="modal-row">
+      <div style="flex:1"><label>Tarih</label><select id="modal-date" autocomplete="off" style="width:100%"></select></div>
     </div>
     <div class="modal-btns"><button class="btn btn-primary" style="flex:1" onclick="confirmAdd()">Ekle</button><button class="btn" onclick="confirmAdd(true)" title="Favorilere ekle">⭐ Favori</button><button class="btn" onclick="closeModal()">İptal</button></div>
   </div>
@@ -1312,12 +1316,26 @@ function updateUI(){
 }
 
 // ── FOOD ──────────────────────────────────────────────────────────────────
-function pushFood(name,amount,kcal100,p100,c100,f100,meal,fiber100,time){
+function pushFood(name,amount,kcal100,p100,c100,f100,meal,fiber100,time,targetDate){
   const r=amount/100;
   const now=new Date();
   const t=time||`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  foods.push({name,amount,kcal:kcal100*r,p:p100*r,c:c100*r,f:f100*r,meal,fiber:(fiber100||0)*r,time:t});
-  weekData[todayDay()]=(weekData[todayDay()]||0)+kcal100*r;
+  const entry={name,amount,kcal:kcal100*r,p:p100*r,c:c100*r,f:f100*r,meal,fiber:(fiber100||0)*r,time:t};
+  const td=todayStr();
+  if(!targetDate||targetDate===td){
+    // Bugüne ekle
+    foods.push(entry);
+    weekData[todayDay()]=(weekData[todayDay()]||0)+kcal100*r;
+  } else {
+    // Geçmiş güne ekle
+    if(!pastFoods[targetDate]) pastFoods[targetDate]=[];
+    pastFoods[targetDate].push(entry);
+    // Haftanın gün adını bul
+    const [y,mo,d]=targetDate.split('-').map(Number);
+    const dayName=DAYS[new Date(y,mo-1,d).getDay()];
+    weekData[dayName]=(weekData[dayName]||0)+kcal100*r;
+    showToast(`📅 ${targetDate} tarihine eklendi ✓`);
+  }
   save();updateUI();
 }
 function addFoodManual(){
@@ -1325,12 +1343,13 @@ function addFoodManual(){
   const fAmt=parseFloat(document.getElementById('f-amount').value)||1;
   const fUnit=document.getElementById('f-unit').value;
   const fGrams=fUnit==='gram'||fUnit==='ml'?fAmt:(fUnit==='100'?fAmt*100:fAmt*parseFloat(fUnit));
-  pushFood(name,fGrams,parseFloat(document.getElementById('f-kcal').value)||0,parseFloat(document.getElementById('f-p').value)||0,parseFloat(document.getElementById('f-c').value)||0,parseFloat(document.getElementById('f-f').value)||0,document.getElementById('f-meal').value,parseFloat(document.getElementById('f-fiber').value)||0,document.getElementById('f-time').value);
-  clearManualForm();showPage('today');showToast('Eklendi ✓');
+  const fDate=document.getElementById('f-date').value||todayStr();
+  pushFood(name,fGrams,parseFloat(document.getElementById('f-kcal').value)||0,parseFloat(document.getElementById('f-p').value)||0,parseFloat(document.getElementById('f-c').value)||0,parseFloat(document.getElementById('f-f').value)||0,document.getElementById('f-meal').value,parseFloat(document.getElementById('f-fiber').value)||0,document.getElementById('f-time').value,fDate);
+  clearManualForm();showPage('today');if(fDate===todayStr())showToast('Eklendi ✓');
 }
 function addQuick(i){const q=QUICK[i];pushFood(q.name,q.amount,q.kcal,q.p,q.c,q.f,q.meal);showPage('today');showToast(q.name+' eklendi ✓');}
 function removeFood(idx){const f=foods[idx];weekData[todayDay()]=Math.max(0,(weekData[todayDay()]||0)-f.kcal);foods.splice(idx,1);save();updateUI();showToast('Silindi');}
-function clearManualForm(){['f-name','f-amount','f-kcal','f-p','f-c','f-f','f-fiber','f-time'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-unit').value='100';document.getElementById('manual-gram-display').textContent='100g';}
+function clearManualForm(){['f-name','f-amount','f-kcal','f-p','f-c','f-f','f-fiber','f-time'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-unit').value='100';document.getElementById('manual-gram-display').textContent='100g';populateDateSelects();}
 
 // ── SEARCH ────────────────────────────────────────────────────────────────
 function onSearchInput(){
@@ -1536,6 +1555,7 @@ function openModalProduct(prod){
   // Set time to current time by default
   const now=new Date();
   document.getElementById('modal-time').value=now.toTimeString().slice(0,5);
+  populateDateSelects();
   updateModalPreview();
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
@@ -1562,7 +1582,8 @@ function confirmAdd(saveFav){
   const amount=getModalGrams();
   const meal=document.getElementById('modal-meal').value;
   const mtime=document.getElementById('modal-time').value||new Date().toTimeString().slice(0,5);
-  pushFood(pendingProduct.name,amount,pendingProduct.kcal100,pendingProduct.p100,pendingProduct.c100,pendingProduct.f100,meal,pendingProduct.fiber100||0,mtime);
+  const mdate=document.getElementById('modal-date').value||todayStr();
+  pushFood(pendingProduct.name,amount,pendingProduct.kcal100,pendingProduct.p100,pendingProduct.c100,pendingProduct.f100,meal,pendingProduct.fiber100||0,mtime,mdate);
   if(saveFav){
     const exists=favFoods.find(f=>f.name===pendingProduct.name);
     if(!exists){favFoods.push({name:pendingProduct.name,kcal100:pendingProduct.kcal100,p100:pendingProduct.p100,c100:pendingProduct.c100,f100:pendingProduct.f100,fiber100:pendingProduct.fiber100||0});save();}
@@ -1884,6 +1905,7 @@ function showPage(id,btn){
   if(btn)btn.classList.add('active');
   else{const idx=['today','add','body','mounjaro','supp','history'].indexOf(id);document.querySelectorAll('.nav-btn')[idx]?.classList.add('active');}
   if(id!=='add')stopScanner();
+  if(id==='add')populateDateSelects();
 }
 function switchTab(tab,btn){
   ['search','barcode','manual','favs'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'block':'none');
@@ -1950,6 +1972,17 @@ function getFiberForFoods(foodList, dateStr){
   const fromFood=foodList.reduce((a,f)=>a+(f.fiber||0),0);
   return {manual,fromFood,total:manual+fromFood};
 }
+function deleteFiberManual(dateStr, idx){
+  if(!fiberData[dateStr]) return;
+  fiberData[dateStr].splice(idx, 1);
+  save();
+  if(viewingDate===dateStr){
+    renderPastDay(dateStr);
+  } else {
+    updateFiberUI();
+  }
+  showToast('Lif kaynağı silindi');
+}
 function addFiberManual(){
   const g=parseFloat(document.getElementById('fiber-manual-input').value);
   const name=document.getElementById('fiber-manual-name').value.trim()||'Besin';
@@ -1978,7 +2011,7 @@ function updateFiberUIForFoods(foodList, dateStr){
     else tip.textContent=`${(goal-total).toFixed(1)}g daha alın — hedefe yaklaşıyorsunuz.`;
   }
   const foodFibers=foodList.filter(f=>f.fiber>0).map(f=>`<span class="fiber-badge">${f.name.split(' ')[0]} ${f.fiber.toFixed(1)}g</span>`);
-  const manualFibers=(fiberData[dateStr]||[]).map(e=>`<span class="fiber-badge">${e.name} ${e.g}g</span>`);
+  const manualFibers=(fiberData[dateStr]||[]).map((e,i)=>`<span class="fiber-badge" style="display:inline-flex;align-items:center;gap:4px">${e.name} ${e.g}g<button onclick="deleteFiberManual('${dateStr}',${i})" style="background:none;border:none;cursor:pointer;color:#27500A;font-size:11px;padding:0;line-height:1;opacity:0.6">✕</button></span>`);
   const listEl=document.getElementById('fiber-foods-list');
   if(listEl)listEl.innerHTML=[...foodFibers,...manualFibers].join('')||'<span style="font-size:12px;color:var(--text3)">Henüz lif kaynağı yok</span>';
 }
@@ -2305,6 +2338,7 @@ function viewDay(dateStr){
   if(bannerText){const d=parseLocalDate(dateStr);bannerText.textContent='📅 '+d.toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long'})+' görüntüleniyor';}
   buildDayPills();
   renderPastDay(dateStr);
+  populateDateSelects(); // Ekle sekmesi tarihi güncelle
 }
 function goToToday(){
   viewingDate=null;
@@ -2312,6 +2346,7 @@ function goToToday(){
   if(banner)banner.style.display='none';
   buildDayPills();
   updateUI();
+  populateDateSelects();
 }
 function renderPastDay(dateStr){
   // Tarih: timezone sorunu olmadan parse et
@@ -2416,7 +2451,7 @@ function renderPastDay(dateStr){
   const fl=document.getElementById('fiber-foods-list');
   if(fl){
     const foodBadges=pastF.filter(f=>f.fiber>0).map(f=>`<span class="fiber-badge">${f.name.split(' ')[0]} ${f.fiber.toFixed(1)}g</span>`);
-    const manBadges=(fiberData[dateStr]||[]).map(e=>`<span class="fiber-badge">${e.name} ${e.g}g</span>`);
+    const manBadges=(fiberData[dateStr]||[]).map((e,i)=>`<span class="fiber-badge" style="display:inline-flex;align-items:center;gap:4px">${e.name} ${e.g}g<button onclick="deleteFiberManual('${dateStr}',${i})" style="background:none;border:none;cursor:pointer;color:#27500A;font-size:11px;padding:0;line-height:1;opacity:0.6">✕</button></span>`);
     fl.innerHTML=[...foodBadges,...manBadges].join('')||'<span style="font-size:12px;color:var(--text3)">Henüz lif kaynağı yok</span>';
   }
 }
@@ -2728,6 +2763,31 @@ function closeConfirm(result){
   if(_confirmResolve){_confirmResolve(result);_confirmResolve=null;}
 }
 
+// ── DATE SELECT HELPERS ──────────────────────────────────────────────────
+function buildDateOptions(){
+  const opts=[];
+  for(let i=0;i<14;i++){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const ds=d.toISOString().split('T')[0];
+    const label=i===0?'Bugün':i===1?'Dün':d.toLocaleDateString('tr-TR',{day:'numeric',month:'long',weekday:'short'});
+    opts.push(`<option value="${ds}">${label}</option>`);
+  }
+  return opts.join('');
+}
+function populateDateSelects(){
+  const opts=buildDateOptions();
+  const fd=document.getElementById('f-date'); if(fd) fd.innerHTML=opts;
+  const md=document.getElementById('modal-date'); if(md) md.innerHTML=opts;
+  // Geçmiş gün görüntüleniyorsa onu seç
+  if(viewingDate){
+    if(fd) fd.value=viewingDate;
+    if(md) md.value=viewingDate;
+  }
+}
+function setFDateToday(){
+  const fd=document.getElementById('f-date'); if(fd) fd.value=todayStr();
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 document.getElementById('search-input').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
 document.getElementById('mj-header-badge').textContent=`💊 Mounjaro ${mjData.dose||5}mg`;
@@ -2735,6 +2795,7 @@ document.getElementById('mj-dose-select').value=mjData.dose||5;
 applyTheme();
 buildDayPills();
 archiveTodayFoods();
+populateDateSelects();
 renderQuick();
 updateUI();
 // Archive today's data before page unload
