@@ -2028,7 +2028,7 @@ function renderMealTimingForFoods(foodList){
     grouped[f.meal].kcal+=f.kcal;
     if(f.time&&f.time<grouped[f.meal].earliest)grouped[f.meal].earliest=f.time;
   });
-  const totalKcal=foods.reduce((a,f)=>a+f.kcal,0)||1;
+  const totalKcal=foodList.reduce((a,f)=>a+f.kcal,0)||1;
   const MEAL_COLORS_MAP={Kahvaltı:'#EF9F27',Öğle:'#378ADD',Akşam:'#D85A30',Atıştırma:'#639922'};
   el.innerHTML=['Kahvaltı','Öğle','Akşam','Atıştırma'].filter(m=>grouped[m]).map(m=>{
     const g=grouped[m];
