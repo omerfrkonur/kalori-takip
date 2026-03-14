@@ -918,6 +918,7 @@ async function loadFromFirebase(uid) {
       if (d.favFoods) { favFoods = JSON.parse(d.favFoods); }
       if (d.earnedBadges) { earnedBadges = JSON.parse(d.earnedBadges); }
       if (d.notifSettings) { notifSettings = JSON.parse(d.notifSettings); }
+      if (d.pastFoods) { pastFoods = JSON.parse(d.pastFoods); }
     }
     updateUI();
     showToast('☁️ Veriler yüklendi');
@@ -1057,7 +1058,8 @@ let packDraftItems=[]; // temp items while building a new pack
 let goalWeight=parseFloat(localStorage.getItem('ht-goalweight')||'0');
 let darkMode=localStorage.getItem('ht-darkmode')||'auto'; // 'auto'|'dark'|'light'
 let viewingDate=null; // null = today, else 'YYYY-MM-DD'
-let pastFoods={}; // {date: foods[]}  — loaded from firebase for past days
+let pastFoods=JSON.parse(localStorage.getItem('ht-past')||'{}'); // {date: foods[]}
+let lastOpenDate=localStorage.getItem('ht-lastdate')||todayStr(); // Son açılış tarihi
 let chartInst=null,weightChartInst=null,pendingProduct=null,scannerRunning=false,searchTimer=null,searchProducts=[];
 
 function todayStr(){return new Date().toISOString().split('T')[0];}
@@ -1071,6 +1073,8 @@ function totals(){return foods.reduce((a,f)=>({kcal:a.kcal+f.kcal,p:a.p+f.p,c:a.
 function pct(v,g){return Math.min(100,Math.round(v/Math.max(1,g)*100));}
 function saveLocal(){
   localStorage.setItem('ht-foods',JSON.stringify(foods));
+  localStorage.setItem('ht-past',JSON.stringify(pastFoods));
+  localStorage.setItem('ht-lastdate',todayStr());
   localStorage.setItem('ht-goals',JSON.stringify(goals));
   localStorage.setItem('ht-week',JSON.stringify(weekData));
   localStorage.setItem('ht-body',JSON.stringify(bodyMeasurements));
@@ -1918,7 +1922,7 @@ function switchTab(tab,btn){
 // ── SETTINGS ──────────────────────────────────────────────────────────────
 function saveGoals(){goals={kcal:parseInt(document.getElementById('sg-kcal').value)||1400,p:parseInt(document.getElementById('sg-p').value)||120,c:parseInt(document.getElementById('sg-c').value)||150,f:parseInt(document.getElementById('sg-f').value)||55,fiber:parseInt(document.getElementById('sg-fiber').value)||25,steps:parseInt(document.getElementById('sg-steps').value)||8000};save();updateUI();showPage('today');showToast('Hedefler kaydedildi ✓');}
 async function clearToday(){const ok=await showConfirm('Bugünü Sıfırla','Bugünkü tüm öğünler silinecek.','🗑️','Sil','#D85A30');if(!ok)return;foods=[];weekData[todayDay()]=0;save();updateUI();showToast('Bugün sıfırlandı');}
-async function clearAll(){const okClear=await showConfirm('Tüm Verileri Sil','Tüm veriler kalıcı olarak silinecek. Bu işlem geri alınamaz!','🗑️','Sil','#D85A30');if(!okClear)return;foods=[];weekData={};goals={kcal:1400,p:120,c:150,f:55,fiber:25,steps:8000};bodyMeasurements=[];mjData={dose:5,injections:[],notes:[]};stepData={};fiberData={};favMeals=[];favFoods=[];earnedBadges=[];save();updateUI();showToast('Tüm veriler silindi');}
+async function clearAll(){const okClear=await showConfirm('Tüm Verileri Sil','Tüm veriler kalıcı olarak silinecek. Bu işlem geri alınamaz!','🗑️','Sil','#D85A30');if(!okClear)return;foods=[];weekData={};goals={kcal:1400,p:120,c:150,f:55,fiber:25,steps:8000};bodyMeasurements=[];mjData={dose:5,injections:[],notes:[]};stepData={};fiberData={};favMeals=[];favFoods=[];earnedBadges=[];pastFoods={};save();updateUI();showToast('Tüm veriler silindi');}
 
 // ── QUICK LIST ─────────────────────────────────────────────────────────────
 function renderQuick(){
@@ -2456,9 +2460,29 @@ function renderPastDay(dateStr){
   }
 }
 
-// Save today's foods to pastFoods before midnight
+// Gün değişimini kontrol et — yeni gün başladıysa dünü arşivle ve foods'u temizle
+function checkDayChange(){
+  const today=todayStr();
+  if(lastOpenDate && lastOpenDate!==today){
+    // Yeni gün: dünün yemeklerini arşivle
+    if(foods.length>0){
+      pastFoods[lastOpenDate]=JSON.parse(JSON.stringify(foods));
+      foods=[];
+      weekData[todayDay()]=0;
+      lastOpenDate=today;
+      save();
+      showToast('Yeni gün başladı 🌅 Dünkü yemekler arşivlendi');
+    }
+  }
+  lastOpenDate=today;
+}
+
+// Sayfa kapanmadan önce bugünü arşivle (tarih değişmez, sadece yedek)
 function archiveTodayFoods(){
-  if(foods.length>0){pastFoods[todayStr()]=JSON.parse(JSON.stringify(foods));save();}
+  if(foods.length>0){
+    pastFoods[todayStr()]=JSON.parse(JSON.stringify(foods));
+    localStorage.setItem('ht-past',JSON.stringify(pastFoods));
+  }
 }
 
 // ── COPY YESTERDAY ────────────────────────────────────────────────────────
@@ -2794,7 +2818,7 @@ document.getElementById('mj-header-badge').textContent=`💊 Mounjaro ${mjData.d
 document.getElementById('mj-dose-select').value=mjData.dose||5;
 applyTheme();
 buildDayPills();
-archiveTodayFoods();
+checkDayChange();
 populateDateSelects();
 renderQuick();
 updateUI();
